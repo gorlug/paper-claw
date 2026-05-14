@@ -3,7 +3,10 @@ package document_test
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/xeipuuv/gojsonschema"
 )
 
 func TestSchemaIsValidJSON(t *testing.T) {
@@ -17,6 +20,40 @@ func TestSchemaIsValidJSON(t *testing.T) {
 	}
 	if _, ok := schema["$schema"]; !ok {
 		t.Error("schema.json missing $schema field")
+	}
+}
+
+func TestAllExpectedFilesConformToSchema(t *testing.T) {
+	schemaAbs, err := filepath.Abs("schema.json")
+	if err != nil {
+		t.Fatalf("abs path for schema.json: %v", err)
+	}
+	schemaLoader := gojsonschema.NewReferenceLoader("file://" + schemaAbs)
+
+	files, err := filepath.Glob("../../testdata/expected/*.json")
+	if err != nil {
+		t.Fatalf("globbing expected files: %v", err)
+	}
+	if len(files) == 0 {
+		t.Fatal("no expected JSON files found under testdata/expected/")
+	}
+	for _, f := range files {
+		t.Run(filepath.Base(f), func(t *testing.T) {
+			abs, err := filepath.Abs(f)
+			if err != nil {
+				t.Fatalf("abs path for %s: %v", f, err)
+			}
+			docLoader := gojsonschema.NewReferenceLoader("file://" + abs)
+			result, err := gojsonschema.Validate(schemaLoader, docLoader)
+			if err != nil {
+				t.Fatalf("validation error: %v", err)
+			}
+			if !result.Valid() {
+				for _, e := range result.Errors() {
+					t.Errorf("  %s", e.String())
+				}
+			}
+		})
 	}
 }
 
