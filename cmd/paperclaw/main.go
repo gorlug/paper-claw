@@ -23,11 +23,13 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  list      list documents in the library")
 	fmt.Fprintln(os.Stderr, "  show      show a document by ID prefix")
 	fmt.Fprintln(os.Stderr, "  search    search document transcripts for a keyword")
+	fmt.Fprintln(os.Stderr, "  serve     run the daemon (Google Drive inbox, polling + push)")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, `Run "paperclaw <command> -help" for command-specific flags.`)
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Environment:")
-	fmt.Fprintln(os.Stderr, "  ANTHROPIC_API_KEY   required for the process command (document classification)")
+	fmt.Fprintln(os.Stderr, "  ANTHROPIC_API_KEY      required for process and serve commands")
+	fmt.Fprintln(os.Stderr, "  OAUTH_CLIENT_SECRET    required for the serve command")
 }
 
 func main() {
@@ -46,6 +48,8 @@ func main() {
 		err = runShow(os.Args[2:])
 	case "search":
 		err = runSearch(os.Args[2:])
+	case "serve":
+		err = runServe(os.Args[2:])
 	case "-h", "-help", "--help":
 		printUsage()
 		return
