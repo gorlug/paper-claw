@@ -1,0 +1,31 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+
+exporters:
+  otlphttp/dash0:
+    endpoint: "https://ingress.eu-west-1.aws.dash0.com:4318"
+    headers:
+      Authorization: "Bearer ${env:DASH0_AUTH_TOKEN}"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/dash0]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/dash0]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/dash0]

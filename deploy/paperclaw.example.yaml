@@ -1,0 +1,50 @@
+# paperclaw daemon configuration
+# Copy to paperclaw.yaml, fill in your values, and mount into the container at
+# /etc/paperclaw/paperclaw.yaml (or pass -config <path> to paperclaw serve).
+#
+# Secrets are NOT stored here — they are read from environment variables:
+#   ANTHROPIC_API_KEY    — Claude API key (required)
+#   OAUTH_CLIENT_SECRET  — Google OAuth2 client secret (required)
+# OTLP configuration is read from standard OTEL_* env vars by the Go SDK.
+
+http:
+  # Address the HTTP server listens on inside the container.
+  bind_addr: ":8080"
+  # Public base URL used when building OAuth redirect URLs and (Phase 3) the
+  # Drive webhook URL. Must be reachable from the internet for Phase 3 push
+  # notifications. Include the scheme; no trailing slash.
+  public_base_url: "https://paperclaw.example.com"
+
+drive:
+  # Google Drive folder IDs — copy from the URL when the folder is open in a
+  # browser: https://drive.google.com/drive/folders/<FOLDER_ID>
+  inbox_folder_id: "1AbCdEfGhIjKlMnOpQrStUvWx"
+  library_folder_id: "2AbCdEfGhIjKlMnOpQrStUvWx"
+  processed_folder_id: "3AbCdEfGhIjKlMnOpQrStUvWx"
+
+oauth:
+  # Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID.
+  client_id: "123456789-abcdefghijklmnop.apps.googleusercontent.com"
+  # Path relative to public_base_url that Google redirects to after consent.
+  redirect_path: "/oauth/callback"
+
+poll:
+  # How often the daemon polls the Drive inbox for new PDFs.
+  interval: "5m"
+  # A file must have a stable size and modifiedTime for this long before it is
+  # considered fully uploaded and eligible for processing.
+  stable_threshold: "30s"
+
+state:
+  # Directory where paperclaw.db (SQLite) is stored. Mount a Docker volume here.
+  dir: "/data"
+
+log:
+  # Minimum log level: debug | info | warn | error
+  level: "info"
+
+# Phase 3 fields (Drive push notifications) — unused in Phase 1/2 but present
+# to avoid config-load errors when running a Phase 3 binary with this file.
+webhook:
+  channel_ttl: "168h"      # 7 days — Drive channel maximum
+  renew_lead_time: "24h"   # renew this long before expiry

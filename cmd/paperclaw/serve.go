@@ -22,6 +22,7 @@ import (
 	"paper-claw/internal/serverhttp"
 	"paper-claw/internal/storage/drive"
 	"paper-claw/internal/store"
+	"paper-claw/internal/telemetry"
 )
 
 func runServe(args []string) error {
@@ -36,12 +37,19 @@ func runServe(args []string) error {
 		return err
 	}
 
-	// Set up structured JSON logging.
+	// Set up structured JSON logging (baseline; telemetry.Setup may replace it
+	// with an OTEL-bridged handler when an OTLP endpoint is configured).
 	var lvl slog.Level
 	if err := lvl.UnmarshalText([]byte(cfg.Log.Level)); err != nil {
 		lvl = slog.LevelInfo
 	}
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: lvl})))
+
+	// Initialise OpenTelemetry. No-op when OTEL_EXPORTER_OTLP_ENDPOINT is unset.
+	telShutdown, err := telemetry.Setup(context.Background(), "paperclaw")
+	if err != nil {
+		return fmt.Errorf("setting up telemetry: %w", err)
+	}
 
 	// Open the SQLite state store.
 	if err := os.MkdirAll(cfg.State.Dir, 0o750); err != nil {
@@ -100,8 +108,15 @@ func runServe(args []string) error {
 	anthropicClient := anthropic.NewClient()
 	prober := serverhttp.NewProber(anthropicClient, time.Hour)
 
-	// (3) Scan worker — owns the coalescing request channel.
-	worker = serve.New(driveStorage, classifier, st)
+	// (3) Telemetry instruments.
+	metrics, err := telemetry.Init()
+	if err != nil {
+		return fmt.Errorf("initialising metrics: %w", err)
+	}
+	observer := telemetry.NewSpanObserver()
+
+	// (4) Scan worker — owns the coalescing request channel.
+	worker = serve.New(driveStorage, classifier, st, metrics, observer)
 
 	// (5) Readiness provider — delegates to store (Drive) and prober (Anthropic).
 	rp := &serveReadyzProvider{st: st, prober: prober}
@@ -173,6 +188,7 @@ func runServe(args []string) error {
 	}
 
 	wg.Wait()
+	telShutdown(shutCtx)
 	return nil
 }
 

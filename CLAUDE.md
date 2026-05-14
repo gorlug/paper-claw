@@ -77,7 +77,9 @@ golangci-lint (v2.x) runs `errcheck`, `errorlint`, `gocritic`, `goimports`, `gos
 - **The daemon does NOT write `process.log`**. The `process` CLI command writes `process.log`; the daemon emits structured `slog` JSON events to stderr only.
 - **CLI commands (`process`/`list`/`show`/`search`) are local-only** and use `os.*` directly. Only the `serve` daemon talks to Google Drive.
 - **SQLite driver is `modernc.org/sqlite`** (pure Go, no cgo). Do not switch to `mattn/go-sqlite3` — the Docker image builds with `CGO_ENABLED=0`.
-- **Telemetry goes through a local OpenTelemetry Collector** (Phase 2), not directly to dash0. OTLP config comes from standard `OTEL_*` env vars.
+- **Telemetry goes through a local OpenTelemetry Collector**, not directly to dash0. OTLP config comes from standard `OTEL_*` env vars; the Go SDK honours them natively.
+- **The Docker image is built with `CGO_ENABLED=0`** — the SQLite driver (`modernc.org/sqlite`) is pure Go. Do not add any cgo dependencies or the build will break.
+- **The `internal/document` package must stay OTEL-free.** The `Observer` interface lives there; the OTEL-backed `SpanObserver` lives in `internal/telemetry`. Never import `go.opentelemetry.io/otel` from `internal/document`.
 - **Webhook handlers must return immediately** and only enqueue a scan. Never process a Drive push notification inline.
 - **Drive push notification channels expire** (~7 days); the renewal timer is mandatory. Both poll ticker and webhook share the same coalescing worker channel — never add a second worker.
 - **OAuth scope is `https://www.googleapis.com/auth/drive`** (broad). Do not narrow to `drive.file` — moving user-dropped inbox files requires the full scope.

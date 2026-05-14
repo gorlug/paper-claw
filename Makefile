@@ -1,4 +1,4 @@
-.PHONY: setup format fmt-check lint test check build deploy deadcode help-snapshot help-check smoke vuln
+.PHONY: setup format fmt-check lint test check build deploy deadcode help-snapshot help-check smoke vuln docker-build
 
 SHELL          := /bin/bash
 GOPATH_BIN     := $(shell go env GOPATH)/bin
@@ -55,6 +55,9 @@ vuln:
 	$(GOVULNCHECK) ./...
 
 check: format lint test vuln
+
+docker-build:
+	docker build -f deploy/Dockerfile .
 
 deploy: build
 	sudo install -m 755 bin/paperclaw /usr/local/bin/paperclaw

@@ -113,6 +113,51 @@ paperclaw list --type invoice | jq '.[].summary'
 
 Each `metadata.json` contains the document type, date, vendor, summary, and optional fields (amount, currency, due date, tags, language).
 
+## Server mode (daemon)
+
+`paperclaw serve` runs as a long-lived daemon. The inbox and library live in Google Drive. Telemetry (logs, metrics, traces) is exported via OpenTelemetry to a local Collector that forwards to dash0.
+
+### Quick start
+
+```bash
+cp deploy/paperclaw.example.yaml deploy/paperclaw.yaml
+# Fill in drive folder IDs, OAuth client ID, bind_addr, public_base_url.
+
+# Set secrets (or use Infisical):
+export ANTHROPIC_API_KEY=sk-ant-...
+export OAUTH_CLIENT_SECRET=GOCSPX-...
+export DASH0_AUTH_TOKEN=...
+
+docker compose -f deploy/docker-compose.yml up -d
+```
+
+Then visit `http://localhost:8080/oauth/start` to authorise Google Drive access. Once the OAuth flow completes, `/readyz` returns 200 and the daemon begins polling the Drive inbox.
+
+### Endpoints
+
+| Path | Description |
+|---|---|
+| `GET /healthz` | Always 200 — liveness probe |
+| `GET /readyz` | 200 when Drive is authenticated and Anthropic is reachable; 503 otherwise |
+| `GET /oauth/start` | Starts the Google OAuth2 consent flow |
+| `GET /oauth/callback` | Redirect target registered in Google Cloud Console |
+
+### Telemetry
+
+Traces, metrics, and structured logs are exported via OTLP/gRPC to the local OpenTelemetry Collector (second service in `docker-compose.yml`), which forwards them to dash0. Configure the Collector endpoint with the standard `OTEL_EXPORTER_OTLP_ENDPOINT` env var. When that variable is unset (e.g., local development), paper-claw falls back to structured JSON logging on stderr and no-op metric/trace providers.
+
+Metrics exported:
+- `documents.processed` — count + processing duration histogram (`document.processing.duration`)
+- `documents.skipped` — duplicates detected by SHA-256 hash
+- `documents.quarantined` — pipeline failures
+- `poll.count` — Drive inbox poll cycles
+
+Traces follow each document through its pipeline stages: `process_document` → `ocr` → `classify` → `library_write`.
+
+### State
+
+All daemon state lives in a SQLite database at `<state.dir>/paperclaw.db` (default `/data/paperclaw.db`). Mount a Docker volume at `/data` to persist state across container restarts.
+
 ## Development
 
 ```bash

@@ -47,7 +47,7 @@ func TestWorker_ProcessesFile(t *testing.T) {
 	storage := fake.New()
 	storage.AddPDF("invoice.pdf", minimalPDF)
 
-	w := serve.New(storage, &stubClassifier{}, st)
+	w := serve.New(storage, &stubClassifier{}, st, nil, nil)
 
 	// Enqueue before starting the worker so the scan executes as soon as Run
 	// begins. processOne uses context.Background() with a per-file timeout, so
@@ -77,7 +77,7 @@ func TestWorker_Coalesces(t *testing.T) {
 	st := openStore(t)
 	storage := fake.New()
 
-	w := serve.New(storage, &stubClassifier{}, st)
+	w := serve.New(storage, &stubClassifier{}, st, nil, nil)
 
 	// Enqueue more than the channel capacity — only one should be buffered.
 	for range 5 {
@@ -101,7 +101,7 @@ func TestWorker_Coalesces(t *testing.T) {
 func TestWorker_StopsOnCtxCancel(t *testing.T) {
 	st := openStore(t)
 	storage := fake.New()
-	w := serve.New(storage, &stubClassifier{}, st)
+	w := serve.New(storage, &stubClassifier{}, st, nil, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
