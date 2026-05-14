@@ -17,9 +17,21 @@ import (
 	"papwer-claw/internal/document"
 )
 
+func printUsage() {
+	fmt.Fprintln(os.Stderr, "usage: paperclaw <command> [flags]")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Commands:")
+	fmt.Fprintln(os.Stderr, "  process   process PDFs from inbox into the library")
+	fmt.Fprintln(os.Stderr, "  list      list documents in the library")
+	fmt.Fprintln(os.Stderr, "  show      show a document by ID prefix")
+	fmt.Fprintln(os.Stderr, "  search    search document transcripts for a keyword")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, `Run "paperclaw <command> -help" for command-specific flags.`)
+}
+
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: paperclaw <command> [flags]")
+		printUsage()
 		os.Exit(1)
 	}
 	classifier := document.NewClaudeClassifier()
@@ -33,8 +45,12 @@ func main() {
 		err = runShow(os.Args[2:])
 	case "search":
 		err = runSearch(os.Args[2:])
+	case "-h", "-help", "--help":
+		printUsage()
+		return
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", os.Args[1])
+		printUsage()
 		os.Exit(1)
 	}
 	if err != nil {
