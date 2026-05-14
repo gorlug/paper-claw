@@ -6,6 +6,16 @@ PaperClaw is a Go CLI that turns an inbox folder of PDFs into an organised libra
 
 This project is built for the **best agentic engineering setup** dimension: investment goes into JSON Schema validation, golden fixtures, an eval harness, drift checks, and an agentic review loop. Architecture and agent-native polish are second-order. The 2-hour build target is a thin slice through M3 (one PDF end-to-end answerable by an agent) so that feedback loops cover the whole pipeline from day one.
 
+## Current state (2026-05-14)
+
+The repo is a near-empty skeleton:
+
+- `internal/document/FormatDirName` — joins date/vendor/description with `_`. One unit test covers the happy path.
+- Tooling: `Makefile` (`check` = format + lint + test), golangci-lint, lefthook pre-commit, Infisical for secrets.
+- `go.mod` has zero third-party dependencies. No `cmd/` binary, no schema, no fixtures, no skills directory.
+
+Everything below is forward-looking design; the milestones reflect that we are starting from this baseline, not from a partially-built pipeline.
+
 ## Pipeline
 
 ```
@@ -130,12 +140,25 @@ No TOML/YAML config in v1. If a third path setting appears, revisit.
 
 Existing (from initial commits): `gofmt`, `golangci-lint` (gocritic, goimports, gosec, revive), `lefthook` pre-commit running format/lint/test, `make check`.
 
-New for M1:
+### M1a — thin slice (two test files)
 
-1. **Golden fixtures.** 3–5 synthetic PDFs in `testdata/inbox/`, one per `type` enum value, covering multi-page + missing-date + German + English edge cases. Generated from HTML/text (stable rendering), committed to the repo. Each paired with `testdata/expected/<name>.json` — the frozen expected metadata.
-2. **Schema validation test.** Unit test loads `schema.json`, validates every `testdata/expected/*.json`. Catches schema drift the moment it's introduced.
-3. **Drift / eval harness.** `make eval` runs `paperclaw process testdata/inbox` against a temp library, diffs each produced `metadata.json` against `testdata/expected/`. Exit non-zero on drift. Wired into lefthook (pre-push if pre-commit is too slow).
-4. **Agentic review skill.** `skills/paperclaw-review/SKILL.md` documents the PR-review checklist for an agent: schema valid · golden diffs clean · quarantine empty for fixtures · new test added for any new behaviour. The agent reads its own checklist before approving a change.
+The smallest end-to-end vertical that exercises the pipeline. Test surface stays at two files:
+
+1. **`internal/document/document_test.go`** — extended in place. Covers `FormatDirName` happy path (existing) plus slug rules: lowercase ASCII, hyphenation, vendor/desc length caps, German umlaut transliteration, and collision-suffix logic.
+2. **`internal/document/schema_test.go`** — new. Loads `internal/document/schema.json` and validates one hand-written `testdata/expected/sample.json` against it. This is the smallest possible schema-drift trip-wire.
+
+No fixture PDF, no OCR, no classifier yet. M1a delivers: the schema file, the slug rules, the CLI skeleton (`paperclaw process` that walks an inbox but only writes metadata for a stubbed transcript), and proof the schema accepts a known-good metadata payload.
+
+### M1b — golden fixtures and eval (later)
+
+Once M1a is green, layer on:
+
+- 3–5 synthetic PDF fixtures under `testdata/inbox/`, one per `type` enum value, covering multi-page + missing-date + German + English edge cases. Generated from HTML/text (stable rendering), committed to the repo. Each paired with `testdata/expected/<name>.json` — the frozen expected metadata.
+- **Schema validation test** extended to validate every `testdata/expected/*.json`.
+- **Drift / eval harness.** `make eval` runs `paperclaw process testdata/inbox` against a temp library, diffs each produced `metadata.json` against `testdata/expected/`. Exit non-zero on drift. Wired into lefthook (pre-push if pre-commit is too slow).
+- **Agentic review skill.** `skills/paperclaw-review/SKILL.md` — PR-review checklist: schema valid · golden diffs clean · quarantine empty for fixtures · new test for new behaviour.
+
+M1b is where the real LLM call lands and where drift becomes possible; M1a is deliberately stochastic-free so the test infrastructure is in place before the classifier exists.
 
 ## M3 agent interface
 
@@ -146,7 +169,7 @@ No MCP server — the CLI is the single source of truth and a Skill is a thinner
 ## Implementation notes
 
 - **Language:** Go (module currently `papwer-claw` — typo to fix in a follow-up commit alongside the `.golangci.yml` `local-prefixes` entry).
-- **LLM:** `claude-sonnet-4-6` via `anthropics/anthropic-sdk-go`, using `tools` / `response_format` to force JSON output that matches `schema.json`. No shell-out to the `claude` CLI.
+- **LLM:** `claude-sonnet-4-6` via `anthropics/anthropic-sdk-go`, using `tools` / `response_format` to force JSON output that matches `schema.json`. No shell-out to the `claude` CLI. The Anthropic SDK is **not yet a dependency** — it is added in M1b alongside the classifier, not in M1a.
 - **Secrets:** `ANTHROPIC_API_KEY` from Infisical.
 - **Reuse:** `internal/document/FormatDirName` already exists with a passing test — extend in place with slug rules and collision suffix logic.
 
@@ -161,13 +184,18 @@ No MCP server — the CLI is the single source of truth and a Skill is a thinner
 
 ## Verification checklist
 
-When M1 and M2 are wired:
+### M1a
 
-1. `make check` green (lint + test).
-2. Schema test green for every fixture.
-3. `make eval` green against frozen expected metadata.
-4. Drop a synthetic PDF into a temp inbox, run `paperclaw process`, verify library entry layout and that `document.pdf` is byte-identical to input.
-5. Re-run `process` on the same inbox — second run is a no-op (idempotency).
-6. Feed a corrupt PDF — lands in `_quarantine/` with populated `processing_error.json`.
-7. From Claude Code, invoke the `paperclaw` skill: "list all utility bills" → agent calls `paperclaw list --type=utility_bill` and returns matches.
-8. Invoke the `paperclaw-review` skill against a diff that breaks a fixture — agent names the failing checklist item.
+1. `make check` green (lint + test, with the extended slug tests).
+2. `internal/document/schema.json` exists and is valid JSON Schema.
+3. `internal/document/schema_test.go` green — `testdata/expected/sample.json` validates.
+4. `paperclaw process --inbox <empty-dir>` exits zero with a "0 documents" summary.
+
+### M1b
+
+5. Drop a synthetic PDF into a temp inbox, run `paperclaw process`, verify library entry layout and that `document.pdf` is byte-identical to input.
+6. Re-run `process` on the same inbox — second run is a no-op (idempotency via `content_hash`).
+7. Feed a corrupt PDF — lands in `_quarantine/` with populated `processing_error.json`.
+8. `make eval` green against frozen expected metadata.
+9. From Claude Code, invoke the `paperclaw` skill: "list all utility bills" → agent calls `paperclaw list --type=utility_bill` and returns matches.
+10. Invoke the `paperclaw-review` skill against a diff that breaks a fixture — agent names the failing checklist item.
