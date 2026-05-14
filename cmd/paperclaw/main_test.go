@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"papwer-claw/internal/document"
+	"paper-claw/internal/document"
 )
 
 func TestWriteLog(t *testing.T) {

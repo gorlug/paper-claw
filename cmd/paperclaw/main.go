@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"papwer-claw/internal/document"
+	"paper-claw/internal/document"
 )
 
 func printUsage() {

@@ -3,7 +3,7 @@ package document_test
 import (
 	"testing"
 
-	"papwer-claw/internal/document"
+	"paper-claw/internal/document"
 )
 
 func ptr(f float64) *float64 { return &f }

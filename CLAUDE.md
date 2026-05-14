@@ -37,7 +37,7 @@ Secrets are injected at runtime via **Infisical** (see `.infisical.json`).
 
 ## Linters
 
-golangci-lint runs `gocritic`, `goimports`, `gosec`, and `revive`. The `goimports` local prefix is `papwer-claw` (note the typo — matches the module name in `go.mod`).
+golangci-lint runs `gocritic`, `goimports`, `gosec`, and `revive`. The `goimports` local prefix is `paper-claw`.
 
 # Test first
 

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"papwer-claw/internal/document"
+	"paper-claw/internal/document"
 )
 
 // stubClassifier is an in-process Classifier used in tests.

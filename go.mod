@@ -1,4 +1,4 @@
-module papwer-claw
+module paper-claw
 
 go 1.26.2
 

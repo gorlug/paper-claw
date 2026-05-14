@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"papwer-claw/internal/document"
+	"paper-claw/internal/document"
 )
 
 func TestExtractText_Stadtwerke(t *testing.T) {

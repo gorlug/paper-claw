@@ -3,7 +3,7 @@ package document_test
 import (
 	"testing"
 
-	"papwer-claw/internal/document"
+	"paper-claw/internal/document"
 )
 
 func TestFormatDirName(t *testing.T) {
