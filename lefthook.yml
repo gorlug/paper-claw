@@ -1,0 +1,10 @@
+pre-commit:
+  commands:
+    format:
+      run: 'test -z "$(gofmt -l .)" || { gofmt -w .; echo "gofmt reformatted files. Review changes and re-stage."; exit 1; }'
+
+    lint:
+      run: 'test -z "$(find . -name "*.go" ! -path "./.git/*")" || golangci-lint run ./...'
+
+    test:
+      run: 'test -z "$(find . -name "*.go" ! -path "./.git/*")" || go test -race -count=1 ./...'
