@@ -1,0 +1,1 @@
+../../skills/paperclaw/SKILL.md
