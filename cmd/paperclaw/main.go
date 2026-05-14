@@ -180,6 +180,9 @@ func runProcess(args []string, classifier document.Classifier) error {
 		}
 		writeLog(logFile, e.Name(), "processed", "", nil)
 		summary.Processed++
+		if err := os.Remove(srcPath); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not delete %s from inbox: %v\n", e.Name(), err)
+		}
 	}
 
 	return printSummary(summary)

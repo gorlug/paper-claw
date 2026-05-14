@@ -99,6 +99,8 @@ func TestRunProcess_LogFileSkipped(t *testing.T) {
 	if err := runProcess([]string{"--inbox", inbox, "--library", library}, cl); err != nil {
 		t.Fatalf("first run: %v", err)
 	}
+	// Re-copy the PDF to simulate re-submitting an already-filed document.
+	copyPDF(t, "../../testdata/stadtwerke-stromrechnung.pdf", filepath.Join(inbox, "stadtwerke-stromrechnung.pdf"))
 	if err := runProcess([]string{"--inbox", inbox, "--library", library}, cl); err != nil {
 		t.Fatalf("second run: %v", err)
 	}
