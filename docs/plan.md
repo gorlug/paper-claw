@@ -75,6 +75,7 @@ Flat, doc-per-directory, slug-named — the agent walks `metadata.json` files, n
 
 ```
 library/
+  process.log
   2026-05-13_stadtwerke_strom-rechnung/
     document.pdf
     transcript.md
@@ -86,6 +87,16 @@ library/
       document.pdf
       processing_error.json
 ```
+
+`process.log` lives at the library root and is appended to on every `process` run. Each line is a JSON object:
+
+```json
+{"occurred_at":"2026-05-14T10:00:00Z","filename":"foo.pdf","status":"processed"}
+{"occurred_at":"2026-05-14T10:01:00Z","filename":"bar.pdf","status":"quarantined","stage":"classify","error":"api unavailable"}
+{"occurred_at":"2026-05-14T10:02:00Z","filename":"dup.pdf","status":"skipped"}
+```
+
+`status` is one of `processed` | `skipped` | `quarantined`. Failures additionally carry `stage` and `error`.
 
 **Slug rules:** lowercase ASCII, hyphenated, vendor ≤30 chars, description ≤40 chars, German umlauts transliterated (`ü`→`ue`). Collisions resolved with `-2`, `-3` suffix on the directory name.
 
@@ -116,7 +127,7 @@ paperclaw show    <id-prefix>
 paperclaw search  <text-query>
 ```
 
-- `process` runs the pipeline over every file in the inbox.
+- `process` runs the pipeline over every file in the inbox. Appends one JSON line per file to `<library>/process.log` (status: `processed` | `skipped` | `quarantined`; failures also carry `stage` and `error`).
 - `list` scans `library/**/metadata.json` and filters structurally.
 - `show` prints metadata + transcript for one entry.
 - `search` greps `transcript.md` across the library.

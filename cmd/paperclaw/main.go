@@ -68,6 +68,31 @@ type processingErrorJSON struct {
 	OccurredAt      string `json:"occurred_at"`
 }
 
+type logEntry struct {
+	OccurredAt string `json:"occurred_at"`
+	Filename   string `json:"filename"`
+	Status     string `json:"status"` // "processed" | "skipped" | "quarantined"
+	Stage      string `json:"stage,omitempty"`
+	Error      string `json:"error,omitempty"`
+}
+
+func writeLog(f *os.File, filename, status, stage string, cause error) {
+	entry := logEntry{
+		OccurredAt: time.Now().UTC().Format(time.RFC3339),
+		Filename:   filename,
+		Status:     status,
+		Stage:      stage,
+	}
+	if cause != nil {
+		entry.Error = cause.Error()
+	}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return
+	}
+	_, _ = f.Write(append(data, '\n'))
+}
+
 func runProcess(args []string, classifier document.Classifier) error {
 	fs := flag.NewFlagSet("process", flag.ContinueOnError)
 	inbox := fs.String("inbox", filepath.Join(mustHomeDir(), "paperclaw", "inbox"), "inbox directory")
@@ -78,6 +103,18 @@ func runProcess(args []string, classifier document.Classifier) error {
 
 	inboxDir := filepath.Clean(*inbox)
 	libraryDir := filepath.Clean(*library)
+
+	fmt.Printf("inbox:   %s\nlibrary: %s\n", inboxDir, libraryDir)
+
+	if err := os.MkdirAll(libraryDir, 0o750); err != nil {
+		return fmt.Errorf("creating library: %w", err)
+	}
+
+	logFile, err := os.OpenFile(filepath.Join(libraryDir, "process.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec
+	if err != nil {
+		return fmt.Errorf("opening log: %w", err)
+	}
+	defer logFile.Close()
 
 	entries, err := os.ReadDir(inboxDir) //nolint:gosec // path from operator-supplied CLI flag
 	if err != nil {
@@ -95,7 +132,9 @@ func runProcess(args []string, classifier document.Classifier) error {
 
 		hash, err := hashFile(srcPath)
 		if err != nil {
-			quarantineFile(libraryDir, srcPath, e.Name(), &stageError{"library_write", err})
+			se := &stageError{"library_write", err}
+			quarantineFile(libraryDir, srcPath, e.Name(), se)
+			writeLog(logFile, e.Name(), "quarantined", se.stage, se.cause)
 			summary.Quarantine++
 			continue
 		}
@@ -105,6 +144,7 @@ func runProcess(args []string, classifier document.Classifier) error {
 			return fmt.Errorf("checking library: %w", err)
 		}
 		if dup {
+			writeLog(logFile, e.Name(), "skipped", "", nil)
 			summary.Skipped++
 			continue
 		}
@@ -115,9 +155,11 @@ func runProcess(args []string, classifier document.Classifier) error {
 				se = &stageError{"library_write", err}
 			}
 			quarantineFile(libraryDir, srcPath, e.Name(), se)
+			writeLog(logFile, e.Name(), "quarantined", se.stage, se.cause)
 			summary.Quarantine++
 			continue
 		}
+		writeLog(logFile, e.Name(), "processed", "", nil)
 		summary.Processed++
 	}
 

@@ -13,6 +13,153 @@ import (
 	"papwer-claw/internal/document"
 )
 
+func TestWriteLog(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "log")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	writeLog(f, "foo.pdf", "processed", "", nil)
+	writeLog(f, "bar.pdf", "quarantined", "classify", errors.New("api unavailable"))
+
+	if _, err := f.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	dec := json.NewDecoder(f)
+
+	var e1 logEntry
+	if err := dec.Decode(&e1); err != nil {
+		t.Fatalf("decode entry 1: %v", err)
+	}
+	if e1.Filename != "foo.pdf" {
+		t.Errorf("entry1 filename = %q", e1.Filename)
+	}
+	if e1.Status != "processed" {
+		t.Errorf("entry1 status = %q", e1.Status)
+	}
+	if e1.Error != "" {
+		t.Errorf("entry1 unexpected error: %q", e1.Error)
+	}
+	if e1.OccurredAt == "" {
+		t.Error("entry1 occurred_at is empty")
+	}
+
+	var e2 logEntry
+	if err := dec.Decode(&e2); err != nil {
+		t.Fatalf("decode entry 2: %v", err)
+	}
+	if e2.Filename != "bar.pdf" {
+		t.Errorf("entry2 filename = %q", e2.Filename)
+	}
+	if e2.Status != "quarantined" {
+		t.Errorf("entry2 status = %q", e2.Status)
+	}
+	if e2.Stage != "classify" {
+		t.Errorf("entry2 stage = %q", e2.Stage)
+	}
+	if e2.Error != "api unavailable" {
+		t.Errorf("entry2 error = %q", e2.Error)
+	}
+}
+
+func TestRunProcess_LogFileProcessed(t *testing.T) {
+	inbox := t.TempDir()
+	library := t.TempDir()
+
+	copyPDF(t, "../../testdata/stadtwerke-stromrechnung.pdf", filepath.Join(inbox, "stadtwerke-stromrechnung.pdf"))
+
+	if err := runProcess([]string{"--inbox", inbox, "--library", library}, goodClassifier()); err != nil {
+		t.Fatalf("process: %v", err)
+	}
+
+	entries := readLogFile(t, filepath.Join(library, "process.log"))
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 log entry, got %d", len(entries))
+	}
+	e := entries[0]
+	if e.Filename != "stadtwerke-stromrechnung.pdf" {
+		t.Errorf("filename = %q", e.Filename)
+	}
+	if e.Status != "processed" {
+		t.Errorf("status = %q, want processed", e.Status)
+	}
+	if e.Error != "" {
+		t.Errorf("unexpected error: %q", e.Error)
+	}
+}
+
+func TestRunProcess_LogFileSkipped(t *testing.T) {
+	inbox := t.TempDir()
+	library := t.TempDir()
+
+	copyPDF(t, "../../testdata/stadtwerke-stromrechnung.pdf", filepath.Join(inbox, "stadtwerke-stromrechnung.pdf"))
+
+	cl := goodClassifier()
+	if err := runProcess([]string{"--inbox", inbox, "--library", library}, cl); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	if err := runProcess([]string{"--inbox", inbox, "--library", library}, cl); err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+
+	entries := readLogFile(t, filepath.Join(library, "process.log"))
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 log entries (processed + skipped), got %d", len(entries))
+	}
+	if entries[0].Status != "processed" {
+		t.Errorf("entry[0] status = %q, want processed", entries[0].Status)
+	}
+	if entries[1].Status != "skipped" {
+		t.Errorf("entry[1] status = %q, want skipped", entries[1].Status)
+	}
+}
+
+func TestRunProcess_LogFileQuarantine(t *testing.T) {
+	inbox := t.TempDir()
+	library := t.TempDir()
+
+	copyPDF(t, "../../testdata/stadtwerke-stromrechnung.pdf", filepath.Join(inbox, "stadtwerke-stromrechnung.pdf"))
+
+	broken := &testClassifier{err: errors.New("api unavailable")}
+	if err := runProcess([]string{"--inbox", inbox, "--library", library}, broken); err != nil {
+		t.Fatalf("process: %v", err)
+	}
+
+	entries := readLogFile(t, filepath.Join(library, "process.log"))
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 log entry, got %d", len(entries))
+	}
+	e := entries[0]
+	if e.Status != "quarantined" {
+		t.Errorf("status = %q, want quarantined", e.Status)
+	}
+	if e.Stage != "classify" {
+		t.Errorf("stage = %q, want classify", e.Stage)
+	}
+	if e.Error != "api unavailable" {
+		t.Errorf("error = %q, want api unavailable", e.Error)
+	}
+}
+
+func readLogFile(t *testing.T, path string) []logEntry {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("log file missing: %v", err)
+	}
+	dec := json.NewDecoder(strings.NewReader(string(data)))
+	var entries []logEntry
+	for dec.More() {
+		var e logEntry
+		if err := dec.Decode(&e); err != nil {
+			t.Fatalf("decode log entry: %v", err)
+		}
+		entries = append(entries, e)
+	}
+	return entries
+}
+
 // testClassifier returns canned metadata, injecting hash and processedAt.
 type testClassifier struct {
 	meta document.Metadata
