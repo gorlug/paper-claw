@@ -118,11 +118,23 @@ func runServe(args []string) error {
 	// (4) Scan worker — owns the coalescing request channel.
 	worker = serve.New(driveStorage, classifier, st, metrics, observer)
 
-	// (5) Readiness provider — delegates to store (Drive) and prober (Anthropic).
+	// (5) Drive push-notification channel manager (Phase 3).
+	webhookURL := cfg.HTTP.PublicBaseURL + "/webhook/drive"
+	chanMgr := serve.NewChannelManager(
+		driveStorage,
+		st,
+		webhookURL,
+		cfg.Webhook.ChannelTTL,
+		cfg.Webhook.RenewLeadTime,
+		enqueue,
+	)
+
+	// (6) Readiness provider — delegates to store (Drive) and prober (Anthropic).
 	rp := &serveReadyzProvider{st: st, prober: prober}
 
-	// (6) HTTP server.
+	// (7) HTTP server + webhook handler.
 	httpSrv := serverhttp.New(cfg.HTTP.BindAddr, oauthCfg, st, rp)
+	httpSrv.RegisterWebhook(serverhttp.NewWebhookHandler(st, enqueue, metrics))
 
 	// --- Goroutines ----------------------------------------------------------
 
@@ -169,6 +181,13 @@ func runServe(args []string) error {
 				enqueue()
 			}
 		}
+	}()
+
+	// Drive push-notification channel manager.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		chanMgr.Run(ctx)
 	}()
 
 	slog.Info("paperclaw serve started",

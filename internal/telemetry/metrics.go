@@ -17,6 +17,7 @@ type Metrics struct {
 	DocumentsSkipped     metric.Int64Counter
 	DocumentsQuarantined metric.Int64Counter
 	PollCount            metric.Int64Counter
+	WebhookCount         metric.Int64Counter
 	ProcessingDuration   metric.Float64Histogram
 }
 
@@ -44,6 +45,11 @@ func Init() (*Metrics, error) {
 	if err != nil {
 		return nil, err
 	}
+	webhooks, err := meter.Int64Counter("webhook.count",
+		metric.WithDescription("Number of Drive push notifications received"))
+	if err != nil {
+		return nil, err
+	}
 	dur, err := meter.Float64Histogram("document.processing.duration",
 		metric.WithDescription("Time taken to process a single PDF, in seconds"),
 		metric.WithUnit("s"),
@@ -57,6 +63,7 @@ func Init() (*Metrics, error) {
 		DocumentsSkipped:     skipped,
 		DocumentsQuarantined: quarantined,
 		PollCount:            polls,
+		WebhookCount:         webhooks,
 		ProcessingDuration:   dur,
 	}, nil
 }

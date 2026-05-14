@@ -81,7 +81,9 @@ golangci-lint (v2.x) runs `errcheck`, `errorlint`, `gocritic`, `goimports`, `gos
 - **The Docker image is built with `CGO_ENABLED=0`** — the SQLite driver (`modernc.org/sqlite`) is pure Go. Do not add any cgo dependencies or the build will break.
 - **The `internal/document` package must stay OTEL-free.** The `Observer` interface lives there; the OTEL-backed `SpanObserver` lives in `internal/telemetry`. Never import `go.opentelemetry.io/otel` from `internal/document`.
 - **Webhook handlers must return immediately** and only enqueue a scan. Never process a Drive push notification inline.
-- **Drive push notification channels expire** (~7 days); the renewal timer is mandatory. Both poll ticker and webhook share the same coalescing worker channel — never add a second worker.
+- **Drive push notification channels expire** (~7 days); the renewal timer in `ChannelManager` is mandatory. Both poll ticker and webhook share the same coalescing worker channel — never add a second worker.
+- **Both poll ticker and webhook use the same coalescing `scanRequests` channel** (capacity 1). Do not add a second worker or a second channel.
+- **The webhook domain must be verified** in Google Cloud Console (APIs & Services → Domain verification) before Drive will POST to it — this is an operational prerequisite.
 - **OAuth scope is `https://www.googleapis.com/auth/drive`** (broad). Do not narrow to `drive.file` — moving user-dropped inbox files requires the full scope.
 
 # Test first

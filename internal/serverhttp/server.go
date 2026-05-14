@@ -66,6 +66,13 @@ func (s *Server) Handler() http.Handler {
 	return s.mux
 }
 
+// RegisterWebhook adds the POST /webhook/drive route to the server. Call this
+// before ListenAndServe. The handler should return immediately and only enqueue
+// a scan — never process inline.
+func (s *Server) RegisterWebhook(handler http.Handler) {
+	s.mux.Handle("POST /webhook/drive", handler)
+}
+
 // handleHealthz is the liveness probe — always returns 200 OK.
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)

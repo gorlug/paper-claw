@@ -66,6 +66,7 @@ func TestMetrics_Init_Noop(t *testing.T) {
 	m.RecordSkipped(ctx)
 	m.RecordQuarantined(ctx)
 	m.RecordPoll(ctx)
+	m.WebhookCount.Add(ctx, 1)
 }
 
 func TestSpanObserver_NoopWhenOtelDisabled(t *testing.T) {

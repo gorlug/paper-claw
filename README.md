@@ -141,6 +141,17 @@ Then visit `http://localhost:8080/oauth/start` to authorise Google Drive access.
 | `GET /readyz` | 200 when Drive is authenticated and Anthropic is reachable; 503 otherwise |
 | `GET /oauth/start` | Starts the Google OAuth2 consent flow |
 | `GET /oauth/callback` | Redirect target registered in Google Cloud Console |
+| `POST /webhook/drive` | Receives Drive push notifications (see below) |
+
+### Push notifications
+
+In addition to periodic polling, the daemon registers a Drive push-notification channel via the Changes API. When a file changes in the inbox folder, Drive POSTs a notification to `/webhook/drive` and the daemon immediately enqueues a scan — typically within seconds rather than the poll interval.
+
+**Prerequisites:**
+1. `public_base_url` in `paperclaw.yaml` must be publicly reachable from the internet (Drive pushes to it directly).
+2. The webhook domain must be verified in Google Cloud Console under **APIs & Services → Domain verification**. This is a one-time setup step.
+
+The channel expires after up to 7 days. The daemon renews it automatically before expiry. If the daemon boots before the OAuth flow is completed, channel setup is deferred until authentication succeeds (the next poll cycle picks it up). Set `webhook.channel_ttl` and `webhook.renew_lead_time` in `paperclaw.yaml` to control the channel lifetime and renewal timing.
 
 ### Telemetry
 
