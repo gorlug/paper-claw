@@ -1,4 +1,4 @@
-.PHONY: setup format lint test check
+.PHONY: setup format lint test check build
 
 GOPATH_BIN := $(shell go env GOPATH)/bin
 
@@ -17,5 +17,8 @@ lint:
 
 test:
 	go test -race -count=1 ./...
+
+build:
+	go build -o bin/paperclaw ./cmd/paperclaw
 
 check: format lint test

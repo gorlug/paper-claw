@@ -27,6 +27,9 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  search    search document transcripts for a keyword")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, `Run "paperclaw <command> -help" for command-specific flags.`)
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Environment:")
+	fmt.Fprintln(os.Stderr, "  ANTHROPIC_API_KEY   required for the process command (document classification)")
 }
 
 func main() {
