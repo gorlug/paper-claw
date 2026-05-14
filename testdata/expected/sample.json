@@ -1,0 +1,14 @@
+{
+  "id": "a3b4c5d6e7f8a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a1b2c3d4e5f6a7b8",
+  "type": "utility_bill",
+  "document_date": "2026-04-01",
+  "vendor": "Stadtwerke",
+  "summary": "Stadtwerke electricity bill for April 2026, due 2026-04-30.",
+  "source_filename": "stadtwerke-stromrechnung.pdf",
+  "processed_at": "2026-05-14T10:00:00Z",
+  "content_hash": "a3b4c5d6e7f8a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a1b2c3d4e5f6a7b8",
+  "amount": 89.50,
+  "currency": "EUR",
+  "due_date": "2026-04-30",
+  "language": "de"
+}

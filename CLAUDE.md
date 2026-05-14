@@ -48,3 +48,5 @@ Always create tests that cover the code you're adding. The tests should cover mu
 Refactor code only after it has been thoroughly tested. Avoid premature optimization and unnecessary complexity.
 
 After you think you're finished, run linter, formatter, and tests before committing.
+
+Always commit with a meaningful message.
