@@ -8,7 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 make test           # run all tests (with -race -count=1)
 make lint           # run golangci-lint
 make format         # gofmt -w .
-make check          # format + lint + test
+make vuln           # scan dependencies for known CVEs (govulncheck)
+make check          # format + lint + test + vuln
 make deadcode       # find unreachable code (golang.org/x/tools/cmd/deadcode)
 make fmt-check      # non-mutating format check for CI
 make help-snapshot  # regenerate docs/cli-help.txt after CLI changes
@@ -17,7 +18,7 @@ make smoke          # end-to-end smoke test (requires ANTHROPIC_API_KEY for live
 go test -run TestFormatDirName ./internal/document/  # run a single test
 ```
 
-Pre-commit hooks (via lefthook) enforce formatting, linting, secret scanning (gitleaks), and tests on every commit. If `gofmt` reformats files, the commit is blocked — re-stage and commit again. Run `make setup` once on a fresh clone to install all tools and register the hooks.
+Pre-commit hooks (via lefthook) enforce formatting, linting, secret scanning (gitleaks), dependency vulnerability scanning (govulncheck), and tests on every commit. If `gofmt` reformats files, the commit is blocked — re-stage and commit again. Run `make setup` once on a fresh clone to install all tools and register the hooks.
 
 ## End-to-end smoke test
 
@@ -60,6 +61,7 @@ golangci-lint (v2.x) runs `errcheck`, `errorlint`, `gocritic`, `goimports`, `gos
 - **`PAPERCLAW_INBOX` and `PAPERCLAW_LIBRARY` env vars are not implemented.** The README and `docs/plan.md` document them as a goal, but `os.Getenv` is never called. Don't assume they work; don't add silent env-var reads without wiring them fully.
 - **Do not loosen the document-type enum** in `internal/document/schema.json` without updating all classifier prompts and tests.
 - **If CLI flags or commands change**, regenerate the help snapshot: `make help-snapshot && git add docs/cli-help.txt`.
+- **The dependency vulnerability scanner is `govulncheck`**, not `trivy`, `snyk`, or `nancy`. It uses the Go vulnerability database (vuln.go.dev) and is the official Go team tool. Don't replace it.
 
 # Test first
 

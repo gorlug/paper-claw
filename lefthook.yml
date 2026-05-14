@@ -12,6 +12,9 @@ pre-commit:
     gitleaks:
       run: 'gitleaks protect --staged --source . || { echo "↳ fix: remove secrets from staged files or add to .gitleaksignore"; exit 1; }'
 
+    vuln:
+      run: 'test -z "$(find . -name "*.go" ! -path "./.git/*")" || make vuln || { echo "↳ run: make vuln"; exit 1; }'
+
     docs-drift:
       run: |
         code=$(git diff --cached --name-only | grep -E '^(cmd/|internal/document/)' || true)
