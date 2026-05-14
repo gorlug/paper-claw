@@ -38,3 +38,7 @@ Secrets are injected at runtime via **Infisical** (see `.infisical.json`).
 ## Linters
 
 golangci-lint runs `gocritic`, `goimports`, `gosec`, and `revive`. The `goimports` local prefix is `papwer-claw` (note the typo — matches the module name in `go.mod`).
+
+# Test first
+
+Always create tests that cover the code you're adding. The tests should cover multiple possible inputs.
