@@ -1,20 +1,18 @@
+// Package main is the paperclaw CLI entry point.
 package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"paper-claw/internal/document"
+	"paper-claw/internal/storage/local"
 )
 
 func printUsage() {
@@ -70,21 +68,13 @@ type processSummary struct {
 	Quarantine int `json:"quarantine"`
 }
 
-// stageError wraps a pipeline error with the stage at which it occurred.
-type stageError struct {
-	stage string
-	cause error
-}
-
-func (e *stageError) Error() string { return e.stage + ": " + e.cause.Error() }
-func (e *stageError) Unwrap() error { return e.cause }
-
+// processingErrorJSON matches the JSON written to _quarantine/<name>/processing_error.json
+// by the local storage backend. Used in tests to verify quarantine output.
 type processingErrorJSON struct {
-	Stage           string `json:"stage"`
-	Error           string `json:"error"`
-	LastLLMResponse string `json:"last_llm_response,omitempty"`
-	RetryHint       string `json:"retry_hint"`
-	OccurredAt      string `json:"occurred_at"`
+	Stage      string `json:"stage"`
+	Error      string `json:"error"`
+	RetryHint  string `json:"retry_hint"`
+	OccurredAt string `json:"occurred_at"`
 }
 
 type logEntry struct {
@@ -135,158 +125,39 @@ func runProcess(args []string, classifier document.Classifier) error {
 	if err != nil {
 		return fmt.Errorf("opening log: %w", err)
 	}
-	defer logFile.Close()
+	defer func() { _ = logFile.Close() }()
 
-	entries, err := os.ReadDir(inboxDir) //nolint:gosec // path from operator-supplied CLI flag
+	store := local.New(inboxDir, libraryDir, processedDir)
+	ctx := context.Background()
+
+	names, err := store.ListInbox(ctx)
 	if err != nil {
-		return fmt.Errorf("reading inbox: %w", err)
+		return err
 	}
 
-	ctx := context.Background()
 	var summary processSummary
-
-	for _, e := range entries {
-		if e.IsDir() || !isPDF(e.Name()) {
-			continue
-		}
-		srcPath := filepath.Join(inboxDir, e.Name())
-
-		hash, err := hashFile(srcPath)
-		if err != nil {
-			se := &stageError{"library_write", err}
-			quarantineFile(libraryDir, srcPath, e.Name(), se)
-			writeLog(logFile, e.Name(), "quarantined", se.stage, se.cause)
-			summary.Quarantine++
-			continue
-		}
-
-		dup, err := isDuplicate(libraryDir, hash)
+	for _, name := range names {
+		result, err := document.ProcessOne(ctx, store, classifier, name)
 		if err != nil {
 			return fmt.Errorf("checking library: %w", err)
 		}
-		if dup {
-			writeLog(logFile, e.Name(), "skipped", "", nil)
+		switch result.Status {
+		case document.StatusProcessed:
+			writeLog(logFile, name, "processed", "", nil)
+			summary.Processed++
+		case document.StatusSkipped:
+			writeLog(logFile, name, "skipped", "", nil)
 			summary.Skipped++
-			continue
-		}
-
-		if err := processFile(ctx, classifier, libraryDir, srcPath, e.Name(), hash); err != nil {
-			var se *stageError
-			if !errors.As(err, &se) {
-				se = &stageError{"library_write", err}
-			}
-			quarantineFile(libraryDir, srcPath, e.Name(), se)
-			writeLog(logFile, e.Name(), "quarantined", se.stage, se.cause)
+		case document.StatusQuarantined:
+			writeLog(logFile, name, "quarantined", result.Stage, result.Err)
 			summary.Quarantine++
-			continue
 		}
-		writeLog(logFile, e.Name(), "processed", "", nil)
-		summary.Processed++
-		moveToProcessed(srcPath, processedDir, e.Name(), hash)
+		if result.MoveErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not move %s to processed: %v\n", name, result.MoveErr)
+		}
 	}
 
 	return printSummary(summary)
-}
-
-func moveToProcessed(srcPath, processedDir, name, hash string) {
-	if err := os.MkdirAll(processedDir, 0o750); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not create processed dir: %v\n", err)
-		return
-	}
-	dst := filepath.Join(processedDir, name)
-	if _, err := os.Stat(dst); err == nil {
-		ext := filepath.Ext(name)
-		stem := strings.TrimSuffix(name, ext)
-		dst = filepath.Join(processedDir, fmt.Sprintf("%s-%s%s", stem, hash[:8], ext))
-	}
-	if err := os.Rename(srcPath, dst); err != nil {
-		// Rename fails across filesystems; fall back to copy+remove.
-		if err2 := copyFile(srcPath, dst); err2 == nil {
-			_ = os.Remove(srcPath)
-		} else {
-			fmt.Fprintf(os.Stderr, "warning: could not move %s to processed: %v\n", name, err)
-		}
-	}
-}
-
-func processFile(ctx context.Context, classifier document.Classifier, libraryDir, srcPath, srcName, hash string) error {
-	transcript, err := document.ExtractText(ctx, srcPath)
-	if err != nil {
-		return &stageError{"ocr", err}
-	}
-
-	processedAt := time.Now().UTC()
-	meta, err := classifier.Classify(ctx, transcript, srcName, hash, processedAt)
-	if err != nil {
-		return &stageError{"classify", err}
-	}
-	meta.SourceFilename = srcName
-
-	if err := document.ValidateMetadata(&meta); err != nil {
-		return &stageError{"schema_validate", err}
-	}
-
-	desc := meta.FileDescription
-	if desc == "" {
-		desc = strings.TrimSuffix(srcName, filepath.Ext(srcName))
-	}
-	dirBase := document.FormatDirName(meta.DocumentDate, meta.Vendor, desc)
-	dirName := document.UniqueDirName(dirBase, func(s string) bool {
-		_, statErr := os.Stat(filepath.Join(libraryDir, s))
-		return statErr == nil
-	})
-	entryDir := filepath.Join(libraryDir, dirName)
-
-	if err := os.MkdirAll(entryDir, 0o750); err != nil {
-		return &stageError{"library_write", err}
-	}
-	if err := copyFile(srcPath, filepath.Join(entryDir, "document.pdf")); err != nil {
-		return &stageError{"library_write", err}
-	}
-	if err := os.WriteFile(filepath.Join(entryDir, "transcript.md"), []byte(transcript), 0o600); err != nil {
-		return &stageError{"library_write", err}
-	}
-	metaJSON, err := json.MarshalIndent(meta, "", "  ")
-	if err != nil {
-		return &stageError{"library_write", err}
-	}
-	if err := os.WriteFile(filepath.Join(entryDir, "metadata.json"), append(metaJSON, '\n'), 0o600); err != nil {
-		return &stageError{"library_write", err}
-	}
-	return nil
-}
-
-func quarantineFile(libraryDir, srcPath, srcName string, cause *stageError) {
-	qDir := filepath.Join(libraryDir, "_quarantine", srcName)
-	if err := os.MkdirAll(qDir, 0o750); err != nil {
-		return
-	}
-	_ = copyFile(srcPath, filepath.Join(qDir, "document.pdf"))
-
-	pe := processingErrorJSON{
-		Stage:      cause.stage,
-		Error:      cause.cause.Error(),
-		RetryHint:  retryHint(cause.stage),
-		OccurredAt: time.Now().UTC().Format(time.RFC3339),
-	}
-	data, err := json.MarshalIndent(pe, "", "  ")
-	if err != nil {
-		return
-	}
-	_ = os.WriteFile(filepath.Join(qDir, "processing_error.json"), append(data, '\n'), 0o600)
-}
-
-func retryHint(stage string) string {
-	switch stage {
-	case "ocr":
-		return "Check that the PDF contains extractable text or try re-scanning."
-	case "classify":
-		return "Check ANTHROPIC_API_KEY and network connectivity; re-run process."
-	case "schema_validate":
-		return "LLM returned unexpected output; re-run process or file a bug."
-	default:
-		return "Check disk space and permissions; re-run process."
-	}
 }
 
 // --- list -------------------------------------------------------------------
@@ -437,51 +308,8 @@ func runSearch(args []string) error {
 
 // --- helpers ----------------------------------------------------------------
 
-func isPDF(name string) bool {
-	return strings.EqualFold(filepath.Ext(name), ".pdf")
-}
-
-func hashFile(path string) (string, error) {
-	f, err := os.Open(path) //nolint:gosec
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
-func isDuplicate(libraryDir, hash string) (bool, error) {
-	entries, err := os.ReadDir(libraryDir) //nolint:gosec
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	for _, e := range entries {
-		if !e.IsDir() || e.Name() == "_quarantine" {
-			continue
-		}
-		m, err := loadMetadata(filepath.Join(libraryDir, e.Name(), "metadata.json"))
-		if err != nil {
-			continue
-		}
-		if m.ContentHash == hash {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 func walkLibrary(libraryDir string) ([]document.Metadata, error) {
 	entries, err := os.ReadDir(libraryDir) //nolint:gosec
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
 	if err != nil {
 		return nil, fmt.Errorf("reading library: %w", err)
 	}
@@ -509,23 +337,6 @@ func loadMetadata(metaPath string) (document.Metadata, error) {
 		return document.Metadata{}, err
 	}
 	return m, nil
-}
-
-func copyFile(src, dst string) error {
-	in, err := os.Open(src) //nolint:gosec
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec
-	if err != nil {
-		return err
-	}
-	if _, err = io.Copy(out, in); err != nil {
-		out.Close()
-		return err
-	}
-	return out.Close()
 }
 
 func printSummary(s processSummary) error {

@@ -1,20 +1,33 @@
+version: "2"
+
 linters:
   enable:
     - errcheck
     - errorlint
     - gocritic
-    - goimports
     - gosec
     - govet
     - revive
     - staticcheck
     - unparam
     - unused
+  exclusions:
+    rules:
+      # main_test.go is a regression guard that cannot be modified; suppress
+      # gosec and errcheck (file reads with variable paths in tests) and unparam there.
+      - path: "cmd/paperclaw/main_test\\.go"
+        linters:
+          - gosec
+          - errcheck
+          - unparam
 
-
-linters-settings:
-  goimports:
-    local-prefixes: paper-claw
+formatters:
+  enable:
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - paper-claw
 
 issues:
   max-issues-per-linter: 0

@@ -88,6 +88,7 @@ func NewClaudeClassifier() *ClaudeClassifier {
 	return &ClaudeClassifier{client: anthropic.NewClient()}
 }
 
+// Classify calls the Anthropic API to classify a document transcript and returns structured metadata.
 func (c *ClaudeClassifier) Classify(ctx context.Context, transcript, sourceFilename, contentHash string, processedAt time.Time) (Metadata, error) {
 	prompt := fmt.Sprintf(
 		"Classify the following document and extract metadata.\n\nFilename: %s\n\nContent:\n%s",

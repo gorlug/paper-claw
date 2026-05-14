@@ -39,7 +39,7 @@ build:
 	go build -o bin/paperclaw ./cmd/paperclaw
 
 deadcode:
-	go run golang.org/x/tools/cmd/deadcode@latest ./...
+	go run golang.org/x/tools/cmd/deadcode@latest -test ./...
 
 help-snapshot: build
 	./bin/paperclaw -help >docs/cli-help.txt 2>&1; true

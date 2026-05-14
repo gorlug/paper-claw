@@ -116,7 +116,7 @@ func TestSampleJSONConformsToSchema(t *testing.T) {
 			t.Errorf("field %q must be 64 chars, got %d", field, len(val))
 		}
 		for _, c := range val {
-			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 				t.Errorf("field %q contains non-hex character %q", field, c)
 				break
 			}

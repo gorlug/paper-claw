@@ -1,3 +1,5 @@
+// Package document provides core domain types, pipeline orchestration, and
+// OCR/classification logic for paper-claw.
 package document
 
 import (
