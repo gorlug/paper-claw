@@ -64,12 +64,11 @@ func TestWriteLog(t *testing.T) {
 }
 
 func TestRunProcess_LogFileProcessed(t *testing.T) {
-	inbox := t.TempDir()
-	library := t.TempDir()
+	inbox, library, processed := setupDirs(t)
 
 	copyPDF(t, "../../testdata/stadtwerke-stromrechnung.pdf", filepath.Join(inbox, "stadtwerke-stromrechnung.pdf"))
 
-	if err := runProcess([]string{"--inbox", inbox, "--library", library}, goodClassifier()); err != nil {
+	if err := runProcess(processArgs(inbox, library, processed), goodClassifier()); err != nil {
 		t.Fatalf("process: %v", err)
 	}
 
@@ -90,18 +89,17 @@ func TestRunProcess_LogFileProcessed(t *testing.T) {
 }
 
 func TestRunProcess_LogFileSkipped(t *testing.T) {
-	inbox := t.TempDir()
-	library := t.TempDir()
+	inbox, library, processed := setupDirs(t)
 
 	copyPDF(t, "../../testdata/stadtwerke-stromrechnung.pdf", filepath.Join(inbox, "stadtwerke-stromrechnung.pdf"))
 
 	cl := goodClassifier()
-	if err := runProcess([]string{"--inbox", inbox, "--library", library}, cl); err != nil {
+	if err := runProcess(processArgs(inbox, library, processed), cl); err != nil {
 		t.Fatalf("first run: %v", err)
 	}
 	// Re-copy the PDF to simulate re-submitting an already-filed document.
 	copyPDF(t, "../../testdata/stadtwerke-stromrechnung.pdf", filepath.Join(inbox, "stadtwerke-stromrechnung.pdf"))
-	if err := runProcess([]string{"--inbox", inbox, "--library", library}, cl); err != nil {
+	if err := runProcess(processArgs(inbox, library, processed), cl); err != nil {
 		t.Fatalf("second run: %v", err)
 	}
 
@@ -118,13 +116,12 @@ func TestRunProcess_LogFileSkipped(t *testing.T) {
 }
 
 func TestRunProcess_LogFileQuarantine(t *testing.T) {
-	inbox := t.TempDir()
-	library := t.TempDir()
+	inbox, library, processed := setupDirs(t)
 
 	copyPDF(t, "../../testdata/stadtwerke-stromrechnung.pdf", filepath.Join(inbox, "stadtwerke-stromrechnung.pdf"))
 
 	broken := &testClassifier{err: errors.New("api unavailable")}
-	if err := runProcess([]string{"--inbox", inbox, "--library", library}, broken); err != nil {
+	if err := runProcess(processArgs(inbox, library, processed), broken); err != nil {
 		t.Fatalf("process: %v", err)
 	}
 
@@ -141,6 +138,81 @@ func TestRunProcess_LogFileQuarantine(t *testing.T) {
 	}
 	if e.Error != "api unavailable" {
 		t.Errorf("error = %q, want api unavailable", e.Error)
+	}
+}
+
+func TestRunProcess_MovesToProcessed(t *testing.T) {
+	inbox, library, processed := setupDirs(t)
+
+	const pdfName = "stadtwerke-stromrechnung.pdf"
+	original, err := os.ReadFile("../../testdata/" + pdfName)
+	if err != nil {
+		t.Fatalf("reading test PDF: %v", err)
+	}
+	copyPDF(t, "../../testdata/"+pdfName, filepath.Join(inbox, pdfName))
+
+	if err := runProcess(processArgs(inbox, library, processed), goodClassifier()); err != nil {
+		t.Fatalf("process: %v", err)
+	}
+
+	// File must be gone from inbox.
+	if _, err := os.Stat(filepath.Join(inbox, pdfName)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("file still in inbox after process: %v", err)
+	}
+
+	// File must be in processed dir with identical content.
+	entries, err := os.ReadDir(processed)
+	if err != nil {
+		t.Fatalf("reading processed dir: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("processed dir is empty after process")
+	}
+	got, err := os.ReadFile(filepath.Join(processed, entries[0].Name()))
+	if err != nil {
+		t.Fatalf("reading processed file: %v", err)
+	}
+	if string(got) != string(original) {
+		t.Error("processed file content differs from original")
+	}
+}
+
+func TestRunProcess_MovesToProcessed_Collision(t *testing.T) {
+	inbox, library, processed := setupDirs(t)
+
+	const pdfName = "stadtwerke-stromrechnung.pdf"
+	copyPDF(t, "../../testdata/"+pdfName, filepath.Join(inbox, pdfName))
+
+	// Pre-create a file in processed dir with the same name to force a collision.
+	if err := os.WriteFile(filepath.Join(processed, pdfName), []byte("placeholder"), 0o600); err != nil {
+		t.Fatalf("creating collision file: %v", err)
+	}
+
+	if err := runProcess(processArgs(inbox, library, processed), goodClassifier()); err != nil {
+		t.Fatalf("process: %v", err)
+	}
+
+	// Inbox must be empty.
+	if _, err := os.Stat(filepath.Join(inbox, pdfName)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("file still in inbox after process: %v", err)
+	}
+
+	// Processed dir must have 2 files: the placeholder and the suffixed move.
+	entries, err := os.ReadDir(processed)
+	if err != nil {
+		t.Fatalf("reading processed dir: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 files in processed dir (placeholder + suffixed), got %d", len(entries))
+	}
+	var hasSuffixed bool
+	for _, e := range entries {
+		if e.Name() != pdfName {
+			hasSuffixed = true
+		}
+	}
+	if !hasSuffixed {
+		t.Error("expected a collision-suffixed filename in processed dir")
 	}
 }
 
@@ -203,22 +275,31 @@ func copyPDF(t *testing.T, src, dst string) {
 	}
 }
 
+// setupDirs creates temporary inbox, library, and processed directories.
+func setupDirs(t *testing.T) (inbox, library, processed string) {
+	t.Helper()
+	return t.TempDir(), t.TempDir(), t.TempDir()
+}
+
+// processArgs builds runProcess arguments including all three directories.
+func processArgs(inbox, library, processed string) []string {
+	return []string{"--inbox", inbox, "--library", library, "--processed", processed}
+}
+
 func TestRunProcess_EmptyInbox(t *testing.T) {
-	inbox := t.TempDir()
-	library := t.TempDir()
-	err := runProcess([]string{"--inbox", inbox, "--library", library}, goodClassifier())
+	inbox, library, processed := setupDirs(t)
+	err := runProcess(processArgs(inbox, library, processed), goodClassifier())
 	if err != nil {
 		t.Fatalf("expected no error on empty inbox, got: %v", err)
 	}
 }
 
 func TestRunProcess_WritesLibraryEntry(t *testing.T) {
-	inbox := t.TempDir()
-	library := t.TempDir()
+	inbox, library, processed := setupDirs(t)
 
 	copyPDF(t, "../../testdata/stadtwerke-stromrechnung.pdf", filepath.Join(inbox, "stadtwerke-stromrechnung.pdf"))
 
-	if err := runProcess([]string{"--inbox", inbox, "--library", library}, goodClassifier()); err != nil {
+	if err := runProcess(processArgs(inbox, library, processed), goodClassifier()); err != nil {
 		t.Fatalf("process failed: %v", err)
 	}
 
@@ -288,13 +369,12 @@ func TestRunProcess_WritesLibraryEntry(t *testing.T) {
 }
 
 func TestRunProcess_SkipsDuplicate(t *testing.T) {
-	inbox := t.TempDir()
-	library := t.TempDir()
+	inbox, library, processed := setupDirs(t)
 
 	copyPDF(t, "../../testdata/stadtwerke-stromrechnung.pdf", filepath.Join(inbox, "stadtwerke-stromrechnung.pdf"))
 
 	cl := goodClassifier()
-	if err := runProcess([]string{"--inbox", inbox, "--library", library}, cl); err != nil {
+	if err := runProcess(processArgs(inbox, library, processed), cl); err != nil {
 		t.Fatalf("first process: %v", err)
 	}
 
@@ -307,8 +387,8 @@ func TestRunProcess_SkipsDuplicate(t *testing.T) {
 		}
 	}
 
-	// Second run: same inbox file → must be skipped, no new entry.
-	if err := runProcess([]string{"--inbox", inbox, "--library", library}, cl); err != nil {
+	// Second run: inbox is now empty (file was moved to processed) → no new entries.
+	if err := runProcess(processArgs(inbox, library, processed), cl); err != nil {
 		t.Fatalf("second process: %v", err)
 	}
 
@@ -325,13 +405,12 @@ func TestRunProcess_SkipsDuplicate(t *testing.T) {
 }
 
 func TestRunProcess_QuarantinesOnClassifierError(t *testing.T) {
-	inbox := t.TempDir()
-	library := t.TempDir()
+	inbox, library, processed := setupDirs(t)
 
 	copyPDF(t, "../../testdata/stadtwerke-stromrechnung.pdf", filepath.Join(inbox, "stadtwerke-stromrechnung.pdf"))
 
 	broken := &testClassifier{err: errors.New("api unavailable")}
-	if err := runProcess([]string{"--inbox", inbox, "--library", library}, broken); err != nil {
+	if err := runProcess(processArgs(inbox, library, processed), broken); err != nil {
 		t.Fatalf("process should not return error even if classifier fails: %v", err)
 	}
 
@@ -375,8 +454,7 @@ func TestRunProcess_QuarantinesOnClassifierError(t *testing.T) {
 }
 
 func TestRunProcess_QuarantinesOnSchemaValidationError(t *testing.T) {
-	inbox := t.TempDir()
-	library := t.TempDir()
+	inbox, library, processed := setupDirs(t)
 
 	copyPDF(t, "../../testdata/stadtwerke-stromrechnung.pdf", filepath.Join(inbox, "stadtwerke-stromrechnung.pdf"))
 
@@ -388,7 +466,7 @@ func TestRunProcess_QuarantinesOnSchemaValidationError(t *testing.T) {
 		Summary:         "Bill.",
 		FileDescription: "strom",
 	}}
-	if err := runProcess([]string{"--inbox", inbox, "--library", library}, broken); err != nil {
+	if err := runProcess(processArgs(inbox, library, processed), broken); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 

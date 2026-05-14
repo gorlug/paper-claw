@@ -4,7 +4,18 @@ pre-commit:
       run: 'test -z "$(gofmt -l .)" || { gofmt -w .; echo "gofmt reformatted files. Review changes and re-stage."; exit 1; }'
 
     lint:
-      run: 'test -z "$(find . -name "*.go" ! -path "./.git/*")" || golangci-lint run ./...'
+      run: 'test -z "$(find . -name "*.go" ! -path "./.git/*")" || make lint || { echo "↳ run: make lint"; exit 1; }'
 
     test:
-      run: 'test -z "$(find . -name "*.go" ! -path "./.git/*")" || go test -race -count=1 ./...'
+      run: 'test -z "$(find . -name "*.go" ! -path "./.git/*")" || go test -race -count=1 ./... || { echo "↳ run: make test"; exit 1; }'
+
+    gitleaks:
+      run: 'gitleaks protect --staged --source . || { echo "↳ fix: remove secrets from staged files or add to .gitleaksignore"; exit 1; }'
+
+    docs-drift:
+      run: |
+        code=$(git diff --cached --name-only | grep -E '^(cmd/|internal/document/)' || true)
+        docs=$(git diff --cached --name-only | grep -E '(README\.md|SKILL\.md|docs/plan\.md)' || true)
+        if [ -n "$code" ] && [ -z "$docs" ]; then
+          echo "⚠ code under cmd/ or internal/document/ changed without touching README.md / SKILL.md / docs/plan.md"
+        fi

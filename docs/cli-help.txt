@@ -1,0 +1,12 @@
+usage: paperclaw <command> [flags]
+
+Commands:
+  process   process PDFs from inbox into the library (moves originals to processed dir)
+  list      list documents in the library
+  show      show a document by ID prefix
+  search    search document transcripts for a keyword
+
+Run "paperclaw <command> -help" for command-specific flags.
+
+Environment:
+  ANTHROPIC_API_KEY   required for the process command (document classification)

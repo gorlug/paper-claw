@@ -5,7 +5,7 @@ A CLI tool that turns an inbox of PDFs into an organised, agent-searchable docum
 ## Requirements
 
 - Go 1.21+
-- [`ocrmypdf`](https://ocrmypdf.readthedocs.io/) and `tesseract` (for OCR)
+- [`pdftotext`](https://poppler.freedesktop.org/) (part of the `poppler-utils` / `poppler` package)
 - An Anthropic API key (for document classification)
 
 ## Installation
@@ -22,22 +22,23 @@ make build   # output: bin/paperclaw
 
 ## Configuration
 
-| Setting | Flag | Environment variable | Default |
-|---|---|---|---|
-| Inbox | `--inbox` | `PAPERCLAW_INBOX` | `~/paperclaw/inbox` |
-| Library | `--library` | `PAPERCLAW_LIBRARY` | `~/paperclaw/library` |
+| Setting | Flag | Default |
+|---|---|---|
+| Inbox | `--inbox` | `~/paperclaw/inbox` |
+| Library | `--library` | `~/paperclaw/library` |
+| Processed | `--processed` | `~/paperclaw/processed` |
 
-`ANTHROPIC_API_KEY` must be set in the environment for the `process` command. CLI flags take precedence over environment variables.
+`ANTHROPIC_API_KEY` must be set in the environment for the `process` command.
 
 ## Usage
 
 ### Process inbox PDFs
 
 ```bash
-paperclaw process [--inbox PATH] [--library PATH]
+paperclaw process [--inbox PATH] [--library PATH] [--processed PATH]
 ```
 
-Walks the inbox, OCRs each PDF, classifies it with Claude, and files it into the library. Duplicates are skipped (detected by SHA-256 hash). Failed documents land in `library/_quarantine/` with a `processing_error.json` explaining the failure.
+Walks the inbox, OCRs each PDF, classifies it with Claude, and files it into the library. After successful processing, the original PDF is moved from the inbox to the `--processed` directory (default `~/paperclaw/processed`). Duplicates are skipped (detected by SHA-256 hash). Failed documents land in `library/_quarantine/` with a `processing_error.json` explaining the failure.
 
 ```
 3 documents processed, 1 skipped (duplicate), 0 quarantined
@@ -95,16 +96,19 @@ paperclaw list --type invoice | jq '.[].summary'
 ## Library layout
 
 ```
-~/paperclaw/library/
-  process.log
-  2026-04-01_stadtwerke_strom-rechnung/
-    document.pdf
-    transcript.md
-    metadata.json
-  _quarantine/
-    bad-scan.pdf/
+~/paperclaw/
+  inbox/            ← drop PDFs here
+  processed/        ← originals land here after successful processing
+  library/
+    process.log
+    2026-04-01_stadtwerke_strom-rechnung/
       document.pdf
-      processing_error.json
+      transcript.md
+      metadata.json
+    _quarantine/
+      bad-scan.pdf/
+        document.pdf
+        processing_error.json
 ```
 
 Each `metadata.json` contains the document type, date, vendor, summary, and optional fields (amount, currency, due date, tags, language).
@@ -117,7 +121,7 @@ make test    # tests only
 make lint    # lint only
 ```
 
-Pre-commit hooks (via lefthook) run format, lint, and tests automatically. Run `make setup` once to install tooling.
+Pre-commit hooks (via lefthook) run format, lint, secret scanning (gitleaks), and tests automatically. Run `make setup` once to install all tools and register the hooks.
 
 ## Claude Code skill
 

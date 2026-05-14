@@ -21,7 +21,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "usage: paperclaw <command> [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Commands:")
-	fmt.Fprintln(os.Stderr, "  process   process PDFs from inbox into the library")
+	fmt.Fprintln(os.Stderr, "  process   process PDFs from inbox into the library (moves originals to processed dir)")
 	fmt.Fprintln(os.Stderr, "  list      list documents in the library")
 	fmt.Fprintln(os.Stderr, "  show      show a document by ID prefix")
 	fmt.Fprintln(os.Stderr, "  search    search document transcripts for a keyword")
@@ -116,14 +116,16 @@ func runProcess(args []string, classifier document.Classifier) error {
 	fs := flag.NewFlagSet("process", flag.ContinueOnError)
 	inbox := fs.String("inbox", filepath.Join(mustHomeDir(), "paperclaw", "inbox"), "inbox directory")
 	library := fs.String("library", filepath.Join(mustHomeDir(), "paperclaw", "library"), "library directory")
+	processed := fs.String("processed", filepath.Join(mustHomeDir(), "paperclaw", "processed"), "directory for successfully processed inbox files")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
 	inboxDir := filepath.Clean(*inbox)
 	libraryDir := filepath.Clean(*library)
+	processedDir := filepath.Clean(*processed)
 
-	fmt.Printf("inbox:   %s\nlibrary: %s\n", inboxDir, libraryDir)
+	fmt.Printf("inbox:     %s\nlibrary:   %s\nprocessed: %s\n", inboxDir, libraryDir, processedDir)
 
 	if err := os.MkdirAll(libraryDir, 0o750); err != nil {
 		return fmt.Errorf("creating library: %w", err)
@@ -180,12 +182,31 @@ func runProcess(args []string, classifier document.Classifier) error {
 		}
 		writeLog(logFile, e.Name(), "processed", "", nil)
 		summary.Processed++
-		if err := os.Remove(srcPath); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not delete %s from inbox: %v\n", e.Name(), err)
-		}
+		moveToProcessed(srcPath, processedDir, e.Name(), hash)
 	}
 
 	return printSummary(summary)
+}
+
+func moveToProcessed(srcPath, processedDir, name, hash string) {
+	if err := os.MkdirAll(processedDir, 0o750); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not create processed dir: %v\n", err)
+		return
+	}
+	dst := filepath.Join(processedDir, name)
+	if _, err := os.Stat(dst); err == nil {
+		ext := filepath.Ext(name)
+		stem := strings.TrimSuffix(name, ext)
+		dst = filepath.Join(processedDir, fmt.Sprintf("%s-%s%s", stem, hash[:8], ext))
+	}
+	if err := os.Rename(srcPath, dst); err != nil {
+		// Rename fails across filesystems; fall back to copy+remove.
+		if err2 := copyFile(srcPath, dst); err2 == nil {
+			_ = os.Remove(srcPath)
+		} else {
+			fmt.Fprintf(os.Stderr, "warning: could not move %s to processed: %v\n", name, err)
+		}
+	}
 }
 
 func processFile(ctx context.Context, classifier document.Classifier, libraryDir, srcPath, srcName, hash string) error {
@@ -287,7 +308,7 @@ func runList(args []string) error {
 		return err
 	}
 
-	var results []document.Metadata
+	results := make([]document.Metadata, 0, len(metas))
 	for _, m := range metas {
 		if *docType != "" && m.Type != *docType {
 			continue
@@ -378,7 +399,7 @@ func runSearch(args []string) error {
 		Entry string `json:"entry"`
 		ID    string `json:"id"`
 	}
-	var hits []hit
+	hits := make([]hit, 0)
 
 	for _, e := range entries {
 		if !e.IsDir() || e.Name() == "_quarantine" {

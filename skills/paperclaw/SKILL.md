@@ -1,4 +1,4 @@
-#Formatt PaperClaw Skill
+# PaperClaw Skill
 
 You have access to the `paperclaw` CLI, which manages a personal document library. Use it to answer questions about the user's PDFs — invoices, utility bills, bank statements, contracts, and more.
 
@@ -94,8 +94,10 @@ Use `paperclaw show` on a hit's `id` to retrieve full details.
 Process PDFs from inbox into the library. Run this when the user says they've added new documents or when the library appears incomplete.
 
 ```
-paperclaw process [--inbox PATH] [--library PATH]
+paperclaw process [--inbox PATH] [--library PATH] [--processed PATH]
 ```
+
+After successful processing, each original PDF is **moved** from the inbox to the `--processed` directory (`~/paperclaw/processed` by default). The inbox is left empty; processed files are safely archived.
 
 **Output** — JSON summary:
 

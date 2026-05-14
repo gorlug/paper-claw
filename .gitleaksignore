@@ -1,0 +1,2 @@
+# Add commit SHAs or finding fingerprints to suppress false-positive gitleaks findings.
+# Format: one SHA or fingerprint per line.

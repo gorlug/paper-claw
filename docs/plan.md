@@ -31,10 +31,12 @@ inbox/foo.pdf
    │
    ├──► library/YYYY-MM-DD_<vendor>_<desc>/{document.pdf, transcript.md, metadata.json}
    │
+   ├──► processed/<original-filename>.pdf  (inbox original, on success)
+   │
    └──► library/_quarantine/<filename>/{document.pdf, processing_error.json}  (on any failure)
 ```
 
-The transcription stage uses `ocrmypdf` / `tesseract` only — no LLM. Transcripts are byte-stable across runs, which makes golden-file tests trivial. The only stochastic stage is the classifier call, isolated behind a JSON Schema.
+The transcription stage uses `pdftotext` (poppler) only — no LLM. Transcripts are byte-stable across runs, which makes golden-file tests trivial. The only stochastic stage is the classifier call, isolated behind a JSON Schema.
 
 ## Data model
 
@@ -121,13 +123,13 @@ The CLI exits zero with a summary; one bad PDF never blocks a batch. CI and the 
 ## CLI surface
 
 ```
-paperclaw process [--inbox PATH] [--library PATH]
+paperclaw process [--inbox PATH] [--library PATH] [--processed PATH]
 paperclaw list    [--type T] [--since DATE] [--vendor V] [--overdue]
 paperclaw show    <id-prefix>
 paperclaw search  <text-query>
 ```
 
-- `process` runs the pipeline over every file in the inbox. Appends one JSON line per file to `<library>/process.log` (status: `processed` | `skipped` | `quarantined`; failures also carry `stage` and `error`).
+- `process` runs the pipeline over every file in the inbox. On success, the original PDF is **moved** to `--processed` (default `~/paperclaw/processed`). Appends one JSON line per file to `<library>/process.log` (status: `processed` | `skipped` | `quarantined`; failures also carry `stage` and `error`).
 - `list` scans `library/**/metadata.json` and filters structurally.
 - `show` prints metadata + transcript for one entry.
 - `search` greps `transcript.md` across the library.
@@ -136,16 +138,17 @@ All commands print JSON when stdout is not a TTY (so the agent can parse cleanly
 
 ## Configuration
 
-Resolution order: CLI flag > env var > default.
+Resolution order: CLI flag > default. (Env-var resolution for `PAPERCLAW_INBOX` / `PAPERCLAW_LIBRARY` is documented here as a goal but **not yet implemented** — `os.Getenv` is never called.)
 
-| Setting | Flag | Env | Default |
-|---|---|---|---|
-| Inbox | `--inbox` | `PAPERCLAW_INBOX` | `~/paperclaw/inbox` |
-| Library | `--library` | `PAPERCLAW_LIBRARY` | `~/paperclaw/library` |
+| Setting | Flag | Default |
+|---|---|---|
+| Inbox | `--inbox` | `~/paperclaw/inbox` |
+| Library | `--library` | `~/paperclaw/library` |
+| Processed | `--processed` | `~/paperclaw/processed` |
 
 `ANTHROPIC_API_KEY` is injected by Infisical at runtime — not read from a config file, not committed.
 
-No TOML/YAML config in v1. If a third path setting appears, revisit.
+No TOML/YAML config in v1.
 
 ## Feedback loops
 
@@ -179,7 +182,7 @@ No MCP server — the CLI is the single source of truth and a Skill is a thinner
 
 ## Implementation notes
 
-- **Language:** Go (module currently `papwer-claw` — typo to fix in a follow-up commit alongside the `.golangci.yml` `local-prefixes` entry).
+- **Language:** Go (module `paper-claw`).
 - **LLM:** `claude-sonnet-4-6` via `anthropics/anthropic-sdk-go`, using `tools` / `response_format` to force JSON output that matches `schema.json`. No shell-out to the `claude` CLI. The Anthropic SDK is **not yet a dependency** — it is added in M1b alongside the classifier, not in M1a.
 - **Secrets:** `ANTHROPIC_API_KEY` from Infisical.
 - **Reuse:** `internal/document/FormatDirName` already exists with a passing test — extend in place with slug rules and collision suffix logic.

@@ -1,9 +1,15 @@
 linters:
   enable:
+    - errcheck
+    - errorlint
     - gocritic
     - goimports
     - gosec
+    - govet
     - revive
+    - staticcheck
+    - unparam
+    - unused
 
 
 linters-settings:

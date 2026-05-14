@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Install tools
+        run: make setup
+
+      - name: Build
+        run: go build ./...
+
+      - name: Format check
+        run: make fmt-check
+
+      - name: Lint
+        run: make lint
+
+      - name: Test
+        run: make test
+
+      - name: Dead code
+        run: make deadcode
+
+      - name: Help snapshot check
+        run: make help-check
+
+      - name: Secret scan
+        run: |
+          gitleaks detect --source . --no-git || \
+            { echo "↳ fix: remove secrets or add fingerprint to .gitleaksignore"; exit 1; }
