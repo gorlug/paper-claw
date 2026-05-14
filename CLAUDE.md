@@ -32,7 +32,11 @@ The script builds the binary, runs `process` / `list` / `show` / `search` agains
 
 ## Architecture
 
-paper-claw is a CLI tool for managing PDF documents. PDFs land in an **inbox** directory; each run processes all files there in three steps: transcribe content, derive a sensible name, move to the **library**.
+paper-claw runs in two modes:
+
+**CLI** (`process` / `list` / `show` / `search`) — processes a local inbox directory once and exits. File I/O uses `os.*` directly via `internal/storage/local`.
+
+**Daemon** (`serve`) — long-lived server that polls a Google Drive inbox and also accepts Drive push notifications (Phase 3). All Drive I/O goes through `internal/storage/drive`. State (dedup index, OAuth token, sync state, counters) lives in a SQLite database at `<state.dir>/paperclaw.db`.
 
 Library layout follows the sidecar pattern:
 
@@ -44,9 +48,17 @@ library/
     metadata.json
 ```
 
-Source is organised under `internal/`:
+The storage-agnostic pipeline (`internal/document.ProcessOne`) is shared by both modes. Source packages:
 
-- `internal/document/` — core domain logic (naming, metadata)
+- `internal/document/`     — core domain types, pipeline, OCR, classification
+- `internal/storage/local` — os.* Storage impl (CLI only)
+- `internal/storage/drive` — Google Drive Storage impl (daemon only)
+- `internal/storage/fake`  — in-memory Storage impl (tests only)
+- `internal/config/`       — YAML config + env secrets loader
+- `internal/store/`        — SQLite state store (modernc.org/sqlite, pure Go)
+- `internal/oauth/`        — Google OAuth2 flow + /oauth/start + /oauth/callback
+- `internal/serverhttp/`   — HTTP server, /healthz, /readyz, Anthropic prober
+- `internal/serve/`        — serialised scan worker
 
 Secrets are injected at runtime via **Infisical** (see `.infisical.json`).
 
@@ -62,6 +74,13 @@ golangci-lint (v2.x) runs `errcheck`, `errorlint`, `gocritic`, `goimports`, `gos
 - **Do not loosen the document-type enum** in `internal/document/schema.json` without updating all classifier prompts and tests.
 - **If CLI flags or commands change**, regenerate the help snapshot: `make help-snapshot && git add docs/cli-help.txt`.
 - **The dependency vulnerability scanner is `govulncheck`**, not `trivy`, `snyk`, or `nancy`. It uses the Go vulnerability database (vuln.go.dev) and is the official Go team tool. Don't replace it.
+- **The daemon does NOT write `process.log`**. The `process` CLI command writes `process.log`; the daemon emits structured `slog` JSON events to stderr only.
+- **CLI commands (`process`/`list`/`show`/`search`) are local-only** and use `os.*` directly. Only the `serve` daemon talks to Google Drive.
+- **SQLite driver is `modernc.org/sqlite`** (pure Go, no cgo). Do not switch to `mattn/go-sqlite3` — the Docker image builds with `CGO_ENABLED=0`.
+- **Telemetry goes through a local OpenTelemetry Collector** (Phase 2), not directly to dash0. OTLP config comes from standard `OTEL_*` env vars.
+- **Webhook handlers must return immediately** and only enqueue a scan. Never process a Drive push notification inline.
+- **Drive push notification channels expire** (~7 days); the renewal timer is mandatory. Both poll ticker and webhook share the same coalescing worker channel — never add a second worker.
+- **OAuth scope is `https://www.googleapis.com/auth/drive`** (broad). Do not narrow to `drive.file` — moving user-dropped inbox files requires the full scope.
 
 # Test first
 

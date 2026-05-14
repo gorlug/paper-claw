@@ -5,8 +5,10 @@ Commands:
   list      list documents in the library
   show      show a document by ID prefix
   search    search document transcripts for a keyword
+  serve     run the daemon (Google Drive inbox, polling + push)
 
 Run "paperclaw <command> -help" for command-specific flags.
 
 Environment:
-  ANTHROPIC_API_KEY   required for the process command (document classification)
+  ANTHROPIC_API_KEY      required for process and serve commands
+  OAUTH_CLIENT_SECRET    required for the serve command
