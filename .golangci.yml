@@ -1,0 +1,15 @@
+linters:
+  enable:
+    - gocritic
+    - goimports
+    - gosec
+    - revive
+
+
+linters-settings:
+  goimports:
+    local-prefixes: papwer-claw
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
