@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go build *)",
+      "Bash(go test *)",
+      "Bash(go env *)",
+      "Bash(go version *)",
+      "Bash(go list *)",
+      "Bash(go install *)",
+      "Bash(go mod *)",
+      "Bash(go get *)",
+      "Bash(go vet *)",
+      "Bash(gofmt *)",
+      "Bash(make *)",
+      "Bash(govulncheck *)",
+      "Bash(golangci-lint *)",
+      "Bash(lefthook *)",
+      "Bash(gitleaks *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(gh api *)",
+      "Bash(gh pr *)",
+      "Bash(gh issue *)",
+      "Bash(chmod +x *)",
+      "Bash(bash *)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:pkg.go.dev)",
+      "WebFetch(domain:golangci-lint.run)"
+    ]
+  }
+}

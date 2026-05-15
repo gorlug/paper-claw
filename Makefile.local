@@ -1,0 +1,14 @@
+# paper-claw bespoke targets — not managed by go-harness
+.PHONY: help-snapshot help-check deploy docker-build
+
+help-snapshot: build
+	./bin/paperclaw -help >docs/cli-help.txt 2>&1; true
+
+help-check: build
+	@diff docs/cli-help.txt <(./bin/paperclaw -help 2>&1) || { echo "CLI help changed — run: make help-snapshot && git add docs/cli-help.txt"; exit 1; }
+
+deploy: build
+	sudo install -m 755 bin/paperclaw /usr/local/bin/paperclaw
+
+docker-build:
+	docker build -f deploy/Dockerfile .

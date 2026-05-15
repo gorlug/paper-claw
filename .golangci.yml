@@ -13,9 +13,11 @@ linters:
     - unused
   exclusions:
     rules:
-      # main_test.go is a regression guard that cannot be modified; suppress
-      # gosec and errcheck (file reads with variable paths in tests) and unparam there.
-      - path: "cmd/paperclaw/main_test\\.go"
+      - path: "main\\.go"
+        text: "should have a package comment"
+        linters:
+          - revive
+      - path: 'cmd/paperclaw/main_test\.go'
         linters:
           - gosec
           - errcheck

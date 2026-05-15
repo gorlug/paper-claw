@@ -18,7 +18,7 @@ pre-commit:
     docs-drift:
       run: |
         code=$(git diff --cached --name-only | grep -E '^(cmd/|internal/document/)' || true)
-        docs=$(git diff --cached --name-only | grep -E '(README\.md|SKILL\.md|docs/plan\.md)' || true)
+        docs=$(git diff --cached --name-only | grep -E '(README.md|SKILL.md|docs/plan.md)' || true)
         if [ -n "$code" ] && [ -z "$docs" ]; then
-          echo "⚠ code under cmd/ or internal/document/ changed without touching README.md / SKILL.md / docs/plan.md"
+          echo "⚠ code under tracked paths changed without touching tracked docs"
         fi

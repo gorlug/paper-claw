@@ -1,4 +1,4 @@
-.PHONY: setup format fmt-check lint test check build deploy deadcode help-snapshot help-check smoke vuln docker-build
+.PHONY: setup format fmt-check lint test build deadcode smoke vuln check docker-build
 
 SHELL          := /bin/bash
 GOPATH_BIN     := $(shell go env GOPATH)/bin
@@ -6,20 +6,23 @@ GOLANGCI_VERSION     := v2.12.2
 LEFTHOOK_VERSION     := v2.1.6
 GITLEAKS_VERSION     := v8.30.1
 GOVULNCHECK_VERSION  := v1.3.0
+DEADCODE_VERSION     := v0.31.0
 
 GOLANGCI    := $(shell command -v golangci-lint 2>/dev/null || echo $(GOPATH_BIN)/golangci-lint)
 GOVULNCHECK := $(shell command -v govulncheck 2>/dev/null || echo $(GOPATH_BIN)/govulncheck)
 
 setup:
 	mkdir -p ~/.local/bin
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_VERSION)
-	go install github.com/evilmartians/lefthook@$(LEFTHOOK_VERSION)
-	go install github.com/gitleaks/gitleaks/v8@$(GITLEAKS_VERSION)
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
+	go install github.com/evilmartians/lefthook/v2@$(LEFTHOOK_VERSION)
+	go install github.com/zricethezav/gitleaks/v8@$(GITLEAKS_VERSION)
 	go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+	go install golang.org/x/tools/cmd/deadcode@$(DEADCODE_VERSION)
 	ln -sf $(GOPATH_BIN)/golangci-lint ~/.local/bin/golangci-lint
 	ln -sf $(GOPATH_BIN)/lefthook ~/.local/bin/lefthook
 	ln -sf $(GOPATH_BIN)/gitleaks ~/.local/bin/gitleaks
 	ln -sf $(GOPATH_BIN)/govulncheck ~/.local/bin/govulncheck
+	ln -sf $(GOPATH_BIN)/deadcode ~/.local/bin/deadcode
 	lefthook install
 
 format:
@@ -39,13 +42,7 @@ build:
 	go build -o bin/paperclaw ./cmd/paperclaw
 
 deadcode:
-	go run golang.org/x/tools/cmd/deadcode@latest -test ./...
-
-help-snapshot: build
-	./bin/paperclaw -help >docs/cli-help.txt 2>&1; true
-
-help-check: build
-	@diff docs/cli-help.txt <(./bin/paperclaw -help 2>&1) || { echo "CLI help changed — run: make help-snapshot && git add docs/cli-help.txt"; exit 1; }
+	go run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VERSION) -test ./...
 
 smoke:
 	@bash scripts/smoke-test.sh
@@ -57,7 +54,6 @@ vuln:
 check: format lint test vuln
 
 docker-build:
-	docker build -f deploy/Dockerfile .
+	docker build -t paperclaw .
 
-deploy: build
-	sudo install -m 755 bin/paperclaw /usr/local/bin/paperclaw
+-include Makefile.local

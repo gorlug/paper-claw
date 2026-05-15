@@ -1,0 +1,26 @@
+module: paper-claw
+binary: paperclaw
+cmd_path: ./cmd/paperclaw
+go_version: "1.26"
+local_prefixes:
+    - paper-claw
+tools:
+    golangci: v2.12.2
+    lefthook: v2.1.6
+    gitleaks: v8.30.1
+    govulncheck: v1.3.0
+    deadcode: v0.31.0
+lint_exclusions:
+    - path: cmd/paperclaw/main_test\.go
+      linters:
+        - gosec
+        - errcheck
+        - unparam
+docs_drift:
+    code_paths:
+        - cmd/
+        - internal/document/
+    doc_paths:
+        - README.md
+        - SKILL.md
+        - docs/plan.md

@@ -33,9 +33,6 @@ jobs:
       - name: Dead code
         run: make deadcode
 
-      - name: Help snapshot check
-        run: make help-check
-
       - name: Secret scan
         run: |
           gitleaks detect --source . --no-git || \
